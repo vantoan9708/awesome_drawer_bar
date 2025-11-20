@@ -41,6 +41,7 @@ class AwesomeDrawerBar extends StatefulWidget {
     this.duration,
     this.isRTL = false,
     this.disableOnCickOnMainScreen = false,
+    this.popUpIconColor,
   }) : assert(angle <= 0.0 && angle >= -30.0);
 
   // Layout style
@@ -86,6 +87,8 @@ class AwesomeDrawerBar extends StatefulWidget {
   final bool isRTL;
 
   final bool disableOnCickOnMainScreen;
+
+  final Color? popUpIconColor;
 
   @override
   _AwesomeDrawerBarState createState() => new _AwesomeDrawerBarState();
@@ -642,7 +645,11 @@ class _AwesomeDrawerBarState extends State<AwesomeDrawerBar> with SingleTickerPr
                               onPressed: _state == DrawerState.open ? () => toggle() : null,
                               backgroundColor: Colors.transparent,
                               elevation: 0.0,
-                              child: Icon(Icons.close, size: 20),
+                              child: Icon(
+                                Icons.close,
+                                size: 20,
+                                color: widget.popUpIconColor ?? Theme.of(context).iconTheme.color,
+                              ),
                             ),
                           ),
                         ),
