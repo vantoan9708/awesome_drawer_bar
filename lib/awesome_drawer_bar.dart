@@ -100,14 +100,15 @@ class AwesomeDrawerBar extends StatefulWidget {
 }
 
 class _AwesomeDrawerBarState extends State<AwesomeDrawerBar> with SingleTickerProviderStateMixin {
-  final Curve _scaleDownCurve = Interval(0.0, 0.3, curve: Curves.easeOut);
-  final Curve _scaleUpCurve = Interval(0.0, 1.0, curve: Curves.easeOut);
-  final Curve _slideOutCurve = Interval(0.0, 1.0, curve: Curves.easeOut);
-  final Curve _slideInCurve = Interval(0.0, 1.0, curve: Curves.easeOut); // Curves.bounceOut
+  static const Curve _scaleDownCurve = Interval(0.0, 0.3, curve: Curves.easeOut);
+  static const Curve _scaleUpCurve = Interval(0.0, 1.0, curve: Curves.easeOut);
+  static const Curve _slideOutCurve = Interval(0.0, 1.0, curve: Curves.easeOut);
+  static const Curve _slideInCurve = Interval(0.0, 1.0, curve: Curves.easeOut); // Curves.bounceOut
   // static const Cubic slowMiddle = Cubic(0.19, 1, 0.22, 1);
 
   late AnimationController _animationController;
   late Animation<double> scaleAnimation;
+  late final Animation<double> _popUpOpacity = _animationController.drive(CurveTween(curve: Curves.easeIn));
 
   DrawerState _state = DrawerState.closed;
 
@@ -148,35 +149,34 @@ class _AwesomeDrawerBarState extends State<AwesomeDrawerBar> with SingleTickerPr
 
     /// Initialize the animation controller
     /// add status listener to update the menuStatus
-    _animationController = AnimationController(
-        vsync: this, duration: widget.duration is Duration ? widget.duration : Duration(milliseconds: 250))
-      ..addStatusListener((AnimationStatus status) {
-        switch (status) {
-          case AnimationStatus.forward:
-            _state = DrawerState.opening;
-            _updateStatusNotifier();
-            break;
-          case AnimationStatus.reverse:
-            _state = DrawerState.closing;
-            _updateStatusNotifier();
-            break;
-          case AnimationStatus.completed:
-            _state = DrawerState.open;
-            _updateStatusNotifier();
-            break;
-          case AnimationStatus.dismissed:
-            _state = DrawerState.closed;
-            _updateStatusNotifier();
-            break;
-        }
-      });
+    _animationController =
+        AnimationController(
+          vsync: this,
+          duration: widget.duration is Duration ? widget.duration : Duration(milliseconds: 250),
+        )..addStatusListener((AnimationStatus status) {
+          switch (status) {
+            case AnimationStatus.forward:
+              _state = DrawerState.opening;
+              _updateStatusNotifier();
+              break;
+            case AnimationStatus.reverse:
+              _state = DrawerState.closing;
+              _updateStatusNotifier();
+              break;
+            case AnimationStatus.completed:
+              _state = DrawerState.open;
+              _updateStatusNotifier();
+              break;
+            case AnimationStatus.dismissed:
+              _state = DrawerState.closed;
+              _updateStatusNotifier();
+              break;
+          }
+        });
     scaleAnimation = new Tween(
       begin: 0.9,
       end: 1.0,
-    ).animate(new CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.slowMiddle,
-    ));
+    ).animate(new CurvedAnimation(parent: _animationController, curve: Curves.slowMiddle));
     // CurvedAnimation(parent: _animationController, curve: Curves.easeIn); //Curves.easeIn Curves.linear
     /// assign controller function to the widget methods
     if (widget.controller != null) {
@@ -215,11 +215,12 @@ class _AwesomeDrawerBarState extends State<AwesomeDrawerBar> with SingleTickerPr
     double slideW = 0,
     double slideHeight = 0,
     double scaleAngle = 0.0,
+    double? screenWidth,
   }) {
     double slidePercent, scalePercent;
     int _rtlSlide = widget.isRTL ? -1 : 1;
 
-    double defaultWidth = MediaQuery.of(context).size.width * (widget.isRTL ? 0.65 : 0.83);
+    double defaultWidth = (screenWidth ?? MediaQuery.of(context).size.width) * (widget.isRTL ? 0.65 : 0.83);
 
     /// determine current slide percent based on the MenuStatus
     switch (_state) {
@@ -257,12 +258,14 @@ class _AwesomeDrawerBarState extends State<AwesomeDrawerBar> with SingleTickerPr
     return Transform(
       transform: Matrix4.translationValues(slideAmountWidth, slideAmountHeight, 0.0)
         ..rotateZ(rotationAngle)
-        ..scale(contentScale, contentScale),
+        ..scaleByDouble(
+          contentScale, // X
+          contentScale, // Y
+          1.0, // Z
+          1.0, // W
+        ),
       alignment: Alignment.centerLeft,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(cornerRadius),
-        child: container,
-      ),
+      child: ClipRRect(borderRadius: BorderRadius.circular(cornerRadius), child: container),
     );
   }
 
@@ -295,30 +298,31 @@ class _AwesomeDrawerBarState extends State<AwesomeDrawerBar> with SingleTickerPr
     }
   }
 
+  void _onMainScreenTap() {
+    if (_state == DrawerState.open) {
+      toggle();
+    }
+  }
+
   Widget renderOverlay() {
+    double rightSlide = MediaQuery.of(context).size.width * 0.75;
     return AnimatedBuilder(
       animation: _animationController,
       builder: (context, child) {
-        double rightSlide = MediaQuery.of(context).size.width * 0.75;
         double left = (1 - _animationController.value) * rightSlide;
         return dragClick(
           menuScreen: GestureDetector(
             child: Stack(
               children: [
                 widget.mainScreen,
-                if (_animationController.value > 0) ...[
+                if (_animationController.value > 0)
                   Opacity(
                     opacity: _animationController.value * 0.5,
                     child: Container(color: Colors.black),
-                  )
-                ],
+                  ),
               ],
             ),
-            onTap: () {
-              if (_state == DrawerState.open) {
-                toggle();
-              }
-            },
+            onTap: _onMainScreenTap,
           ),
           mainScreen: ClipRRect(
             borderRadius: BorderRadius.circular(widget.borderRadius * _animationController.value),
@@ -340,88 +344,68 @@ class _AwesomeDrawerBarState extends State<AwesomeDrawerBar> with SingleTickerPr
   }
 
   Widget renderFixedStack() {
+    double rightSlide = MediaQuery.of(context).size.width * 0.75;
     return AnimatedBuilder(
       animation: _animationController,
       builder: (context, child) {
-        double rightSlide = MediaQuery.of(context).size.width * 0.75;
         double slide = rightSlide * _animationController.value;
         return dragClick(
-          menuScreen: Container(
-            color: widget.backgroundColor,
-            child: widget.menuScreen,
-          ),
+          menuScreen: child!,
           mainScreen: Transform(
-            transform: Matrix4.identity()..translate(widget.isRTL ? -slide : slide),
+            transform: Matrix4.identity()..translateByDouble(widget.isRTL ? -slide : slide, 0.0, 0.0, 1.0),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(widget.borderRadius * _animationController.value),
               child: GestureDetector(
                 child: Stack(
                   children: [
                     widget.mainScreen,
-                    if (_animationController.value > 0) ...[
+                    if (_animationController.value > 0)
                       Opacity(
                         opacity: _animationController.value * 0.5,
                         child: Container(color: Colors.black),
-                      )
-                    ],
+                      ),
                   ],
                 ),
-                onTap: () {
-                  if (_state == DrawerState.open) {
-                    toggle();
-                  }
-                },
+                onTap: _onMainScreenTap,
               ),
             ),
           ),
         );
       },
+      child: Container(color: widget.backgroundColor, child: widget.menuScreen),
     );
   }
 
   Widget renderStack() {
+    double rightSlide = MediaQuery.of(context).size.width * 0.75;
     return AnimatedBuilder(
       animation: _animationController,
       builder: (context, child) {
-        double rightSlide = MediaQuery.of(context).size.width * 0.75;
         double slide = rightSlide * _animationController.value;
         double left = (1 - _animationController.value) * rightSlide;
         return Stack(
           children: [
             Transform.translate(
               offset: Offset(widget.isRTL ? left : -left, 0),
-              child: Container(
-                color: widget.backgroundColor,
-                width: rightSlide,
-                child: widget.menuScreen,
-              ),
+              child: Container(color: widget.backgroundColor, width: rightSlide, child: widget.menuScreen),
             ),
             Stack(
               children: [
                 Transform(
-                  transform: Matrix4.identity()..translate(widget.isRTL ? -slide : slide),
+                  transform: Matrix4.identity()..translateByDouble(widget.isRTL ? -slide : slide, 0.0, 0.0, 1.0),
                   child: GestureDetector(
-                    onHorizontalDragUpdate: _animationController.value > 0
-                        ? (details) {
-                            closeDrag(details);
-                          }
-                        : null,
+                    onHorizontalDragUpdate: _animationController.value > 0 ? closeDrag : null,
                     child: Stack(
                       children: [
                         widget.mainScreen,
-                        if (_animationController.value > 0) ...[
+                        if (_animationController.value > 0)
                           Opacity(
                             opacity: _animationController.value * 0.5,
                             child: Container(color: Colors.black),
-                          )
-                        ],
+                          ),
                       ],
                     ),
-                    onTap: () {
-                      if (_state == DrawerState.open) {
-                        toggle();
-                      }
-                    },
+                    onTap: _onMainScreenTap,
                   ),
                 ),
                 GestureDetector(
@@ -456,101 +440,82 @@ class _AwesomeDrawerBarState extends State<AwesomeDrawerBar> with SingleTickerPr
 
   Widget renderScaleRight({double slideHeight = 0.0, double scaleAngle = 0.0}) {
     double slidePercent = widget.isRTL ? MediaQuery.of(context).size.width * .095 : 15.0;
+    double screenWidth = MediaQuery.of(context).size.width;
     return AnimatedBuilder(
       animation: _animationController,
       builder: (context, child) {
-        bool absorbing = _animationController.value > 0 && widget.disableOnCickOnMainScreen ? true : false;
+        bool absorbing = _animationController.value > 0 && widget.disableOnCickOnMainScreen;
         return dragClick(
-          menuScreen: Container(
-            color: widget.backgroundColor,
-            child: widget.menuScreen,
-          ),
+          menuScreen: child!,
           shadow: widget.showShadow
               ? [
                   /// Displaying the first shadow
-                  AnimatedBuilder(
-                    animation: _animationController,
-                    builder: (_, w) => _zoomAndSlideContent(w,
-                        slideHeight: slideHeight,
-                        scaleAngle: scaleAngle == 0.0 ? 0.0 : scaleAngle - 8,
-                        scale: .9,
-                        slideW: slidePercent * 2),
-                    child: Container(color: widget.shadowColor.withOpacity(0.3)),
+                  _zoomAndSlideContent(
+                    Container(color: widget.shadowColor.withValues(alpha: 0.3)),
+                    slideHeight: slideHeight,
+                    scaleAngle: scaleAngle == 0.0 ? 0.0 : scaleAngle - 8,
+                    scale: .9,
+                    slideW: slidePercent * 2,
+                    screenWidth: screenWidth,
                   ),
-                  AnimatedBuilder(
-                    animation: _animationController,
-                    builder: (_, w) => _zoomAndSlideContent(w,
-                        slideHeight: slideHeight,
-                        scaleAngle: scaleAngle == 0.0 ? 0.0 : scaleAngle - 4.0,
-                        scale: .95,
-                        slideW: slidePercent),
-                    child: Container(color: widget.shadowColor.withOpacity(0.9)),
-                  )
+                  _zoomAndSlideContent(
+                    Container(color: widget.shadowColor.withValues(alpha: 0.9)),
+                    slideHeight: slideHeight,
+                    scaleAngle: scaleAngle == 0.0 ? 0.0 : scaleAngle - 4.0,
+                    scale: .95,
+                    slideW: slidePercent,
+                    screenWidth: screenWidth,
+                  ),
                 ]
               : null,
-          mainScreen: AnimatedBuilder(
-            animation: _animationController,
-            builder: (_, w) => _zoomAndSlideContent(w, slideHeight: slideHeight, scaleAngle: scaleAngle),
-            child: GestureDetector(
+          mainScreen: _zoomAndSlideContent(
+            GestureDetector(
               child: Stack(
                 children: [
-                  AbsorbPointer(
-                    absorbing: absorbing,
-                    child: widget.mainScreen,
-                  ),
+                  AbsorbPointer(absorbing: absorbing, child: widget.mainScreen),
                   if (_animationController.value > 0)
                     GestureDetector(
                       behavior: HitTestBehavior.translucent,
-                      onHorizontalDragUpdate: (details) => openDrag(details),
+                      onHorizontalDragUpdate: openDrag,
                       child: Container(width: 20),
                     ),
                 ],
               ),
-              onTap: () {
-                if (_state == DrawerState.open) {
-                  toggle();
-                }
-              },
+              onTap: _onMainScreenTap,
             ),
+            slideHeight: slideHeight,
+            scaleAngle: scaleAngle,
+            screenWidth: screenWidth,
           ),
         );
       },
+      child: Container(color: widget.backgroundColor, child: widget.menuScreen),
     );
   }
 
   Widget renderRotate3dIn() {
+    double rightSlide = MediaQuery.of(context).size.width * 0.75;
     return AnimatedBuilder(
       animation: _animationController,
       builder: (context, child) {
-        double rightSlide = MediaQuery.of(context).size.width * 0.75;
         double x = _animationController.value * (rightSlide / 1.89);
         double rotate = _animationController.value * (pi / 4);
         bool absorbing = _animationController.value > 0 && widget.disableOnCickOnMainScreen ? true : false;
         return dragClick(
-          menuScreen: Container(
-            color: widget.backgroundColor,
-            child: widget.menuScreen,
-          ),
+          menuScreen: child!,
           mainScreen: Transform(
             transform: Matrix4.identity()
               ..setEntry(3, 2, 0.0009)
-              ..translate(widget.isRTL ? -x : x)
+              ..translateByDouble(widget.isRTL ? -x : x, 0.0, 0.0, 1.0)
               ..rotateY(widget.isRTL ? -rotate : rotate),
             alignment: widget.isRTL ? Alignment.centerLeft : Alignment.centerRight,
             child: ClipRRect(
               borderRadius: BorderRadius.circular(widget.borderRadius * _animationController.value),
               child: GestureDetector(
-                onTap: () {
-                  if (_state == DrawerState.open) {
-                    toggle();
-                  }
-                },
+                onTap: _onMainScreenTap,
                 child: Stack(
                   children: [
-                    AbsorbPointer(
-                      absorbing: absorbing,
-                      child: widget.mainScreen,
-                    ),
+                    AbsorbPointer(absorbing: absorbing, child: widget.mainScreen),
                     if (_animationController.value > 0) Container(),
                   ],
                 ),
@@ -559,44 +524,35 @@ class _AwesomeDrawerBarState extends State<AwesomeDrawerBar> with SingleTickerPr
           ),
         );
       },
+      child: Container(color: widget.backgroundColor, child: widget.menuScreen),
     );
   }
 
   Widget renderRotate3dOut() {
+    double rightSlide = MediaQuery.of(context).size.width * 0.75;
     return AnimatedBuilder(
       animation: _animationController,
       builder: (context, child) {
-        double rightSlide = MediaQuery.of(context).size.width * 0.75;
         double x = _animationController.value * (rightSlide / 2.65);
         double scale = 1 - (_animationController.value * 0.3);
         double rotate = _animationController.value * (pi / 4);
         bool absorbing = _animationController.value > 0 && widget.disableOnCickOnMainScreen ? true : false;
         return dragClick(
-          menuScreen: Container(
-            color: widget.backgroundColor,
-            child: widget.menuScreen,
-          ),
+          menuScreen: child!,
           mainScreen: Transform(
             transform: Matrix4.identity()
               ..setEntry(3, 2, 0.0009)
-              ..translate(widget.isRTL ? -x : x)
-              ..scale(scale)
+              ..translateByDouble(widget.isRTL ? -x : x, 0.0, 0.0, 1.0)
+              ..scaleByDouble(scale, scale, 1.0, 1.0)
               ..rotateY(widget.isRTL ? rotate : -rotate),
             alignment: widget.isRTL ? Alignment.centerLeft : Alignment.centerRight,
             child: ClipRRect(
               borderRadius: BorderRadius.circular(widget.borderRadius * _animationController.value),
               child: GestureDetector(
-                onTap: () {
-                  if (_state == DrawerState.open) {
-                    toggle();
-                  }
-                },
+                onTap: _onMainScreenTap,
                 child: Stack(
                   children: [
-                    AbsorbPointer(
-                      absorbing: absorbing,
-                      child: widget.mainScreen,
-                    ),
+                    AbsorbPointer(absorbing: absorbing, child: widget.mainScreen),
                     if (_animationController.value > 0) Container(),
                   ],
                 ),
@@ -605,6 +561,7 @@ class _AwesomeDrawerBarState extends State<AwesomeDrawerBar> with SingleTickerPr
           ),
         );
       },
+      child: Container(color: widget.backgroundColor, child: widget.menuScreen),
     );
   }
 
@@ -614,35 +571,28 @@ class _AwesomeDrawerBarState extends State<AwesomeDrawerBar> with SingleTickerPr
       builder: (context, child) {
         return Stack(
           children: [
-            Stack(
-              children: [
-                widget.mainScreen,
-                GestureDetector(
-                  behavior: HitTestBehavior.translucent,
-                  onHorizontalDragUpdate: (details) => openDrag(details),
-                  child: Container(width: 20),
-                ),
-              ],
+            widget.mainScreen,
+            GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onHorizontalDragUpdate: openDrag,
+              child: Container(width: 20),
             ),
-            if (_animationController.value > 0) ...[
+            if (_animationController.value > 0)
               Opacity(
-                opacity: _animationController.drive(CurveTween(curve: Curves.easeIn)).value, //Curves.easeOut
+                opacity: _popUpOpacity.value, //Curves.easeOut
                 child: ScaleTransition(
                   scale: scaleAnimation,
                   child: GestureDetector(
-                    onPanUpdate: (details) => closeDrag(details),
+                    onPanUpdate: closeDrag,
                     child: Stack(
                       children: <Widget>[
-                        Container(
-                          color: widget.backgroundColor,
-                          child: widget.menuScreen,
-                        ),
+                        Container(color: widget.backgroundColor, child: widget.menuScreen),
                         Padding(
                           padding: EdgeInsets.only(right: 24, top: 24),
                           child: Align(
                             alignment: Alignment.topRight,
                             child: FloatingActionButton(
-                              onPressed: _state == DrawerState.open ? () => toggle() : null,
+                              onPressed: _state == DrawerState.open ? toggle : null,
                               backgroundColor: Colors.transparent,
                               elevation: 0.0,
                               child: Icon(
@@ -657,8 +607,7 @@ class _AwesomeDrawerBarState extends State<AwesomeDrawerBar> with SingleTickerPr
                     ),
                   ),
                 ),
-              )
-            ],
+              ),
           ],
         );
       },
@@ -705,24 +654,14 @@ class _AwesomeDrawerBarState extends State<AwesomeDrawerBar> with SingleTickerPr
       children: [
         menuScreen,
         if (shadow != null) ...shadow,
-        Stack(
-          children: [
-            GestureDetector(
-              onHorizontalDragUpdate: _animationController.value > 0
-                  ? (details) {
-                      closeDrag(details);
-                    }
-                  : null,
-              child: mainScreen,
-            ),
-            GestureDetector(
-              behavior: HitTestBehavior.translucent,
-              onHorizontalDragUpdate: (details) => openDrag(details),
-              child: Container(
-                width: DrawerState.closed == _state ? 20 : 0,
-              ),
-            ),
-          ],
+        GestureDetector(
+          onHorizontalDragUpdate: _animationController.value > 0 ? closeDrag : null,
+          child: mainScreen,
+        ),
+        GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onHorizontalDragUpdate: openDrag,
+          child: Container(width: DrawerState.closed == _state ? 20 : 0),
         ),
       ],
     );
